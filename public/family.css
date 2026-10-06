@@ -1,7 +1,7 @@
-/* FAMILY view styles. All classes are prefixed fam-. Tokens and .eyebrow/.microlabel/.card come from shared.css. */
+/* OBSERVER view styles. All classes are prefixed fam-. Tokens and .eyebrow/.microlabel/.card come from shared.css. */
 
-/* Family dropdown: quiet, paper background, hairline border */
-.fam-select-wrap { margin: 0 0 14px; }
+/* Persona row: "Posting as [Maya's dad]" */
+.fam-persona { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; }
 .fam-select {
   appearance: none; -webkit-appearance: none;
   min-height: 40px; padding: 0 36px 0 12px;
@@ -62,6 +62,30 @@
 }
 .fam-note:empty { display: none; }
 
+/* Converge moment: other families' observations (abstract chips, never their words) glide in, merge, then the reveal arrives */
+.fam-gather { position: relative; height: 84px; overflow: hidden; animation: fam-stage-out 0.35s ease-in 1.35s both; }
+.fam-chip {
+  position: absolute; left: 50%; top: 50%; width: 104px; height: 44px; padding: 10px 12px; border-radius: 10px;
+  background: var(--card); border: 1px solid var(--line); display: flex; flex-direction: column; gap: 6px; justify-content: center;
+  opacity: 0; animation: fam-gather 1.35s cubic-bezier(0.45, 0, 0.2, 1) var(--delay, 0s) both;
+}
+.fam-chip i { display: block; height: 4px; border-radius: 2px; background: var(--line); }
+.fam-chip i + i { width: 62%; }
+.fam-chip--own { --fx: 0px; --fy: 0px; --delay: 0s; border-color: var(--terra); animation-name: fam-own; }
+.fam-knot {
+  position: absolute; left: 50%; top: 50%; width: 14px; height: 14px; border-radius: 50%; background: var(--terra);
+  box-shadow: 0 0 0 8px rgba(200, 65, 26, 0.14); opacity: 0; animation: fam-knot 1.7s ease-out both;
+}
+@keyframes fam-gather {
+  0% { opacity: 0; transform: translate(calc(-50% + var(--fx)), calc(-50% + var(--fy))) scale(0.92); }
+  25% { opacity: 1; }
+  70% { opacity: 1; transform: translate(-50%, -50%) scale(0.98); }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); }
+}
+@keyframes fam-own { 0% { opacity: 0; transform: translate(-50%, -50%) scale(0.95); } 25%, 70% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.55); } }
+@keyframes fam-knot { 0%, 62% { opacity: 0; transform: translate(-50%, -50%) scale(0.3); } 82% { opacity: 1; transform: translate(-50%, -50%) scale(1.15); } 100% { opacity: 1; transform: translate(-50%, -50%) scale(1); } }
+@keyframes fam-stage-out { to { opacity: 0; } }
+
 /* Results: echo (quiet) then reveal (the peak) */
 .fam-results { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
 .fam-results:empty { display: none; }
@@ -82,7 +106,7 @@
 @keyframes fam-reveal-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
 
 @media (prefers-reduced-motion: reduce) {
-  .fam-reveal { animation: none; }
+  .fam-reveal, .fam-gather { animation: none; }
   .fam-submit.is-busy::before { animation: none; opacity: 0.6; }
 }
 

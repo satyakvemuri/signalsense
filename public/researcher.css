@@ -92,7 +92,6 @@
 .res-chip--converging { background: var(--terra); border-color: var(--terra); color: var(--card); }
 .res-chip--single { border: 1px dashed var(--edge); color: var(--soft); }
 .res-chip--transition { border-color: var(--terra-line); color: var(--terra-ink); }
-.res-block-title { margin-bottom: 10px; }
 
 .res-timeline { position: relative; height: 62px; margin: 0 8px; }
 .res-timeline-line { position: absolute; left: 0; right: 0; top: 10px; border-top: 1px solid var(--line); }
@@ -112,7 +111,7 @@
 
 .res-draft { border: 1px solid var(--line); border-radius: 12px; padding: 16px; background: var(--paper); display: flex; flex-direction: column; gap: 10px; }
 .res-draft-item { font: 400 21px/1.25 var(--serif); }
-.res-draft-row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; }
+.res-draft-row { display: flex; justify-content: flex-end; }
 .res-stamp { color: var(--terra-ink); background: var(--terra-tint); border: 1px solid var(--terra-line); padding: 6px 10px; border-radius: 8px; letter-spacing: 0.1em; }
 .res-gold {
   font: 600 14px/1 var(--sans); color: var(--ink); background: var(--gold); border: 0; border-radius: 10px;
@@ -142,3 +141,44 @@
   .res-side { max-width: none; flex-basis: 100%; }
   .res-quote { flex-direction: column; gap: 4px; }
 }
+
+/* Prominent hypothesis banner (applies to the whole progression) */
+.res-banner {
+  color: var(--terra-ink); background: var(--terra-tint); border: 1px solid var(--terra-line); border-radius: 10px;
+  padding: 10px 14px; font-size: 11px; letter-spacing: 0.14em; text-align: center; font-weight: 500;
+}
+
+/* Progression rail: independent observations → emerging pattern → suggested research question */
+.res-rail { list-style: none; margin: 0; padding: 0; display: flex; gap: 6px; }
+.res-rail-step { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; padding-top: 8px; border-top: 2px solid var(--line); color: var(--muted); }
+.res-rail-step.is-reached { border-top-color: var(--terra); color: var(--ink); }
+.res-rail-n { color: inherit; }
+.res-rail-step.is-reached .res-rail-n { color: var(--terra-ink); }
+.res-rail-text { font: 500 13px/1.25 var(--sans); }
+
+.res-sec { display: flex; flex-direction: column; gap: 12px; }
+.res-sec-title { color: var(--terra-ink); }
+.res-pattern { display: flex; flex-direction: column; gap: 2px; }
+.res-pattern-line { font: 400 22px/1.25 var(--serif); }
+
+/* Where this goes */
+.res-goes { padding: 20px 22px; display: flex; flex-direction: column; gap: 16px; }
+.res-flow { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 22px; }
+.res-node { position: relative; border: 1px dashed var(--dash); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 6px; min-height: 92px; }
+.res-node:not(:last-child)::after { content: "→"; position: absolute; right: -19px; top: 50%; transform: translateY(-50%); color: var(--muted); font: 400 16px/1 var(--mono); }
+.res-node-title { font: 400 19px/1.2 var(--serif); }
+.res-node--done { border: 1px solid var(--terra-line); background: var(--terra-tint); }
+.res-node--now { border: 1.5px solid var(--terra); background: var(--terra-tint); }
+.res-node--done .res-mono, .res-node--now .res-mono { color: var(--terra-ink); }
+.res-node--next { color: var(--soft); }
+.res-contexts { display: flex; flex-direction: column; gap: 10px; border-top: 1px solid var(--line); padding-top: 14px; }
+.res-contexts-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.res-context { border: 1px dashed var(--dash); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 4px; }
+.res-context-what { font: 400 17px/1.25 var(--serif); }
+
+@media (max-width: 1180px) {
+  .res-flow { grid-template-columns: 1fr; gap: 20px; }
+  .res-node:not(:last-child)::after { content: "↓"; right: auto; left: 50%; top: auto; bottom: -19px; transform: translateX(-50%); }
+  .res-contexts-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 480px) { .res-rail { flex-direction: column; } }

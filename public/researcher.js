@@ -233,7 +233,6 @@
   // Builds the "when each family noticed" timeline, one dot per family at its first report.
   function renderTimeline(sig) {
     const wrap = el("div");
-    wrap.append(mono("When each family noticed", "res-block-title"));
     const track = el("div", "res-timeline");
     track.append(el("div", "res-timeline-line"));
     const t0 = Date.parse(sig.firstAt), span = Math.max(1, Date.parse(sig.lastAt) - t0);
@@ -256,7 +255,6 @@
   // Builds the verbatim quote list, newest first.
   function renderQuotes(sig) {
     const wrap = el("div", "res-quotes");
-    wrap.append(mono("In their words · verbatim"));
     for (const q of sig.quotes.slice(0, 6)) {
       const fresh = isRecent(q.createdAt);
       const b = el("blockquote", "res-quote" + (fresh ? " is-new" : ""));
@@ -267,27 +265,58 @@
     return wrap;
   }
 
-  // Builds the draft-questionnaire box (or a quiet explanation when no item is drafted) with the stamp.
+  // Builds the draft-questionnaire box (or a quiet explanation when nothing is drafted), with the add button when a draft exists.
   function renderDraft(sig) {
     const box = el("div", "res-draft");
     if (sig.draft) {
-      box.append(mono("Draft questionnaire item", "res-accent"), el("div", "res-draft-item", `“${sig.draft.item}”`), el("div", "res-note", sig.draft.question));
-    } else {
-      box.append(mono("Draft questionnaire item"), el("div", "res-note", sig.watched ? "Nothing drafted yet — a draft appears once 2+ independent families report this theme." : "Not drafted — this theme isn't on the watch list."));
-    }
-    const row = el("div", "res-draft-row");
-    row.append(el("span", "res-stamp res-mono", "Hypothesis, not finding · AI knowledge"));
-    if (sig.draft) {
+      box.append(el("div", "res-draft-item", `“${sig.draft.item}”`), el("div", "res-note", sig.draft.question));
+      const row = el("div", "res-draft-row");
       const btn = el("button", "res-gold", "Add to next questionnaire");
       btn.type = "button";
       btn.addEventListener("click", () => window.SignalSense.toast("QUESTIONNAIRE REGISTRY — COMING SOON"));
       row.append(btn);
+      box.append(row);
+    } else {
+      box.append(el("div", "res-note", sig.watched ? "No research question yet — one appears once 2+ independent families report this theme." : "No research question — this theme isn't on the watch list."));
     }
-    box.append(row);
     return box;
   }
 
-  // Builds the selected-signal detail panel.
+  // Builds the progression rail: independent observations → emerging pattern → suggested research question (reached steps highlighted).
+  function renderRail(sig) {
+    const reached = [true, sig.familyCount >= 2, Boolean(sig.draft)];
+    const rail = el("ol", "res-rail");
+    ["Independent observations", "Emerging pattern", "Suggested research question"].forEach((text, i) => {
+      const li = el("li", "res-rail-step" + (reached[i] ? " is-reached" : ""));
+      li.append(el("span", "res-rail-n res-mono", String(i + 1)), el("span", "res-rail-text", text));
+      rail.append(li);
+    });
+    return rail;
+  }
+
+  // Wraps one numbered section of the detail panel with its heading.
+  function section(n, title, ...children) {
+    const sec = el("div", "res-sec");
+    sec.append(mono(`${n} · ${title}`, "res-sec-title"), ...children);
+    return sec;
+  }
+
+  // Builds the pattern section: the independent-family statement, or a quiet "not yet" for a single family.
+  function renderPattern(sig) {
+    const days = Math.max(1, Math.round((Date.parse(sig.lastAt) - Date.parse(sig.firstAt)) / 86400000));
+    const box = el("div", "res-pattern");
+    if (sig.familyCount < 2) {
+      box.append(el("div", "res-note", "One family so far — not a pattern yet."));
+      return box;
+    }
+    box.append(
+      el("div", "res-pattern-line", `${plural(sig.familyCount, "independent family", "independent families")} · ${plural(sig.reportCount, "report", "reports")} · ${plural(days, "day", "days")}`),
+      el("div", "res-note", `Different words, same area: ${sig.area}`),
+    );
+    return box;
+  }
+
+  // Builds the selected-signal detail panel: prominent hypothesis stamp, progression rail, then the three numbered steps.
   function renderDetail(sig) {
     const card = el("section", "card res-detail" + (sig.stage === "converging" ? " is-hot" : ""));
     card.id = "res-detail";
@@ -296,11 +325,52 @@
     chips.append(el("span", `res-chip res-chip--${sig.stage} res-mono`, STAGE_NAME[sig.stage]));
     const tr = transitionLabel(sig);
     if (tr) chips.append(el("span", "res-chip res-chip--transition res-mono", tr));
-    const days = Math.max(1, Math.round((Date.parse(sig.lastAt) - Date.parse(sig.firstAt)) / 86400000));
     const head = el("div");
-    head.append(mono(sig.area), el("h2", "res-h2", sig.label), el("div", "res-note", `${plural(sig.familyCount, "independent family", "independent families")} · ${plural(sig.reportCount, "report", "reports")} · ${plural(days, "day", "days")}`));
-    card.append(chips, head, renderTimeline(sig), renderQuotes(sig), renderDraft(sig));
+    head.append(mono(sig.area), el("h2", "res-h2", sig.label));
+    card.append(
+      el("div", "res-banner res-mono", "Hypothesis, not finding · AI knowledge"),
+      chips,
+      head,
+      renderRail(sig),
+      section(1, "Independent observations", renderTimeline(sig), renderQuotes(sig)),
+      section(2, "Emerging pattern", renderPattern(sig)),
+      section(3, "Suggested research question", renderDraft(sig)),
+    );
     return card;
+  }
+
+  // Builds one node of the "Where this goes" flow.
+  function goesNode(caption, title, state) {
+    const li = el("li", "res-node res-node--" + state);
+    li.append(mono(caption), el("div", "res-node-title", title));
+    return li;
+  }
+
+  // Builds the final "Where this goes" flow: observation → signal → question → study → evidence → three contexts. Partners appear only downstream.
+  function renderGoes(sel) {
+    const sec = el("section", "card res-goes");
+    sec.setAttribute("aria-label", "Where this goes");
+    sec.append(mono("Where this goes"));
+    const hasPattern = sel.familyCount >= 2, hasQuestion = Boolean(sel.draft);
+    const flow = el("ol", "res-flow");
+    flow.append(
+      goesNode("Observe · Remember", "Lived observation", hasPattern ? "done" : "now"),
+      goesNode("Converge", "Emerging signal", hasQuestion ? "done" : hasPattern ? "now" : "next"),
+      goesNode("Investigate", "Research question", hasQuestion ? "now" : "next"),
+      goesNode("Study", "Registry / Natural-history study", "next"),
+      goesNode("Evidence", "Evidence", "next"),
+    );
+    const ctx = el("div", "res-contexts");
+    ctx.append(mono("Evidence can inform", "res-contexts-title"));
+    const grid = el("div", "res-contexts-grid");
+    for (const [when, what] of [["No treatment yet", "Understand disease"], ["Clinical trial", "Investigate what endpoints may miss"], ["Approved treatment", "Real-world research"]]) {
+      const c = el("div", "res-context");
+      c.append(mono(when), el("div", "res-context-what", what));
+      grid.append(c);
+    }
+    ctx.append(grid);
+    sec.append(flow, ctx, el("div", "res-note", "Research partners appear only downstream, with evidence — never with raw observations."));
+    return sec;
   }
 
   // Selects a signal, re-renders the dashboard, and brings the detail panel into view.
@@ -354,6 +424,7 @@
     pane.append(renderStats(), renderPipeline(), split);
     const others = renderOthers(sel);
     if (others) pane.append(others);
+    pane.append(renderGoes(sel));
     return pane;
   }
 

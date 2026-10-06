@@ -1,8 +1,18 @@
-// FAMILY view: log an observation, see it echoed back, and (quietly) see the reveal when other families describe something similar.
+// OBSERVER view: log an observation as a named observer (patient, parent, spouse or caregiver), see it echoed back, and see the converge moment when other families describe something similar.
 (function () {
   const SVG_NS = "http://www.w3.org/2000/svg";
   const REQUEST_TIMEOUT_MS = 45000; // the server can wait ~20s on the memory service; leave generous headroom
   const REVEAL_MIN_COUNT = 2; // the reveal only appears when at least this many other families converge
+  const GATHER_MS = 1700; // how long the "observations coming together" moment lasts before the reveal
+  const MAX_GHOSTS = 4; // at most this many other-family chips are drawn in the converge moment
+
+  // The observers one can post as: the anonymous family id sent to the server, plus who is speaking and about whom.
+  const PERSONAS = [
+    { id: "fam_a", label: "Maya\u2019s dad", about: "Maya" },
+    { id: "fam_b", label: "Elena\u2019s husband", about: "Elena" },
+    { id: "fam_c", label: "Sam\u2019s caregiver", about: "Sam" },
+  ];
+  let gatherTimer = null; // pending reveal timer, cleared if a new post arrives first
 
   // The one optional capture attachment the submit path reads; null until voice/image capture is wired up.
   let attachment = null;
@@ -99,11 +109,32 @@
   function buildReveal(count) {
     const card = el("div", "card fam-reveal");
     const p = el("p", "fam-reveal-text");
-    p.append(document.createTextNode(count + " other families in this community have described "));
+    p.append(document.createTextNode(count + " other families have described "));
     p.append(el("em", null, "something similar"));
     p.append(document.createTextNode("."));
     card.append(p);
     return card;
+  }
+
+  // Builds the brief "observations coming together" stage: abstract chips (no other family's words) glide into the poster's own chip and merge into a terracotta dot.
+  function buildGather(count) {
+    const stage = el("div", "fam-gather");
+    stage.setAttribute("aria-hidden", "true");
+    const ghosts = Math.min(count, MAX_GHOSTS);
+    for (let i = 0; i < ghosts; i++) {
+      const side = i % 2 === 0 ? -1 : 1;
+      const reach = 96 + 44 * Math.floor(i / 2);
+      const chip = el("span", "fam-chip");
+      chip.style.setProperty("--fx", side * reach + "px");
+      chip.style.setProperty("--fy", (i % 2 === 0 ? -14 : 14) + "px");
+      chip.style.setProperty("--delay", i * 0.12 + "s");
+      chip.append(el("i"), el("i"));
+      stage.append(chip);
+    }
+    const own = el("span", "fam-chip fam-chip--own");
+    own.append(el("i"), el("i"));
+    stage.append(own, el("span", "fam-knot"));
+    return stage;
   }
 
   // Decides from the server's convergence object whether the reveal should show (needs availability and enough families).
@@ -132,20 +163,21 @@
     }
   }
 
-  // Builds the whole FAMILY view inside the given root element and wires up its behaviour.
+  // Builds the whole OBSERVER view inside the given root element and wires up its behaviour.
   function mount(root) {
     root.textContent = "";
 
     const eyebrow = el("p", "eyebrow", "Log an observation");
 
-    // Family dropdown
-    const selectWrap = el("div", "fam-select-wrap");
+    // Persona: who is posting right now, made explicit ("Posting as Maya's dad")
+    const selectWrap = el("div", "fam-persona");
+    selectWrap.append(el("span", "microlabel", "Posting as"));
     const select = el("select", "fam-select");
     select.id = "fam-family";
-    select.setAttribute("aria-label", "Family");
-    [["fam_a", "Family A"], ["fam_b", "Family B"], ["fam_c", "Family C"]].forEach(([value, label]) => {
-      const opt = el("option", null, label);
-      opt.value = value;
+    select.setAttribute("aria-label", "Posting as");
+    PERSONAS.forEach((p) => {
+      const opt = el("option", null, p.label);
+      opt.value = p.id;
       select.append(opt);
     });
     selectWrap.append(select);
@@ -159,8 +191,14 @@
     textarea.id = "fam-text";
     textarea.name = "text";
     textarea.rows = 4;
-    textarea.placeholder = "What did you notice?";
-    textarea.setAttribute("aria-label", "What did you notice?");
+    // Personalises the prompt to the person being observed ("What did you notice about Maya?").
+    function syncPersona() {
+      const persona = PERSONAS.find((p) => p.id === select.value) || PERSONAS[0];
+      textarea.placeholder = "What did you notice about " + persona.about + "?";
+      textarea.setAttribute("aria-label", textarea.placeholder);
+    }
+    syncPersona();
+    select.addEventListener("change", syncPersona);
 
     const bar = el("div", "fam-bar");
     const modes = el("div", "fam-modes");
@@ -199,12 +237,25 @@
       form.setAttribute("aria-busy", String(isBusy));
     }
 
-    // Replaces whatever is in the results area with the echo card and, when convergence warrants, the reveal card.
+    // Replaces the results area with the echo card; on convergence, plays the gather moment and then fades in the reveal.
     function showResult(observation, convergence, fallbackText) {
+      clearTimeout(gatherTimer);
       results.textContent = "";
       const heard = observation && typeof observation.text === "string" ? observation.text : fallbackText;
       results.append(buildEcho(heard));
-      if (shouldReveal(convergence)) results.append(buildReveal(Number(convergence.count)));
+      if (!shouldReveal(convergence)) return;
+      const count = Number(convergence.count);
+      const reduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      if (reduced) {
+        results.append(buildReveal(count));
+        return;
+      }
+      const stage = buildGather(count);
+      results.append(stage);
+      gatherTimer = setTimeout(() => {
+        stage.remove();
+        results.append(buildReveal(count));
+      }, GATHER_MS);
     }
 
     // Handles a form submit: validates, posts, then clears and shows the echo (and reveal) or a quiet error.
