@@ -69,7 +69,7 @@ async function handleCreate(
 // Returns themes reported by 2+ distinct families, with verbatim quotes and a drafted questionnaire question.
 async function handleClusters(_req: Request, res: Response<ClustersResponse | ErrorBody>): Promise<void> {
   if (!mem) {
-    res.status(503).json({ error: "Mem0 is not configured — set MEM0_API_KEY in .env" });
+    res.status(503).json({ error: "Mem0 is not configured — set the MEM0_API_KEY environment variable" });
     return;
   }
   try {
@@ -83,7 +83,7 @@ async function handleClusters(_req: Request, res: Response<ClustersResponse | Er
 // Returns every category-grouped signal (stage, families, verbatim quotes, drafted item) for the researcher dashboard.
 async function handleSignals(_req: Request, res: Response<SignalsResponse | ErrorBody>): Promise<void> {
   if (!mem) {
-    res.status(503).json({ error: "Mem0 is not configured — set MEM0_API_KEY in .env" });
+    res.status(503).json({ error: "Mem0 is not configured — set the MEM0_API_KEY environment variable" });
     return;
   }
   try {
