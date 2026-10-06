@@ -6,10 +6,12 @@ import path from "node:path";
 import { addObservation, getObservation, listFamilyIds, listObservations, loadSeeds } from "./store.js";
 import { createMem0ServiceFromEnv } from "./mem0.js";
 import { buildClusters, findConvergence, syncObservations } from "./convergence.js";
+import { buildSignals } from "./signals.js";
 import type {
   ClustersResponse,
   Convergence,
   CreateObservationResponse,
+  SignalsResponse,
   NewObservation,
   Observation,
 } from "./types.js";
@@ -78,9 +80,25 @@ async function handleClusters(_req: Request, res: Response<ClustersResponse | Er
   }
 }
 
+// Returns every category-grouped signal (stage, families, verbatim quotes, drafted item) for the researcher dashboard.
+async function handleSignals(_req: Request, res: Response<SignalsResponse | ErrorBody>): Promise<void> {
+  if (!mem) {
+    res.status(503).json({ error: "Mem0 is not configured — set MEM0_API_KEY in .env" });
+    return;
+  }
+  try {
+    const categories = await mem.categoriesByObservation(listFamilyIds());
+    res.json(buildSignals(listObservations(), categories));
+  } catch (err) {
+    console.error("Signals lookup failed:", err);
+    res.status(502).json({ error: "Mem0 lookup failed" });
+  }
+}
+
 app.get("/api/observations", handleList);
 app.post("/api/observations", handleCreate);
 app.get("/api/clusters", handleClusters);
+app.get("/api/signals", handleSignals);
 app.use(express.static(publicDir));
 
 const seeded = loadSeeds();

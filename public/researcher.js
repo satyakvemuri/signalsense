@@ -1,9 +1,14 @@
-// Researcher view: shows clusters of independent family reports as hypotheses, with verbatim quotes and a drafted question.
+// Researcher dashboard: sidebar, stat strip, signal pipeline, signal graph, selected-signal detail, other signals.
 (function () {
-  let body = null; // container that holds the loading / empty / error / cards content
-  let latestRequest = 0; // counter so only the newest fetch is allowed to render
+  const RECENT_MS = 15 * 60 * 1000; // an observation this fresh counts as "just now"
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const STAGE_NAME = { single: "Single note", echo: "Echo", converging: "Converging" };
 
-  // Creates an element with an optional class name and optional text (text is always set via textContent).
+  const state = { signals: [], observations: [], pane: "converging", selected: null, loadedAt: null, status: "loading" };
+  let root = null;
+  let latestRequest = 0; // so only the newest fetch may render
+
+  // Creates an element with an optional class and text (text always goes in via textContent).
   function el(tag, className, text) {
     const node = document.createElement(tag);
     if (className) node.className = className;
@@ -11,128 +16,461 @@
     return node;
   }
 
-  // Uppercases only the first character of a string, for display only.
-  function capitalise(text) {
-    const s = String(text == null ? "" : text);
-    return s.charAt(0).toUpperCase() + s.slice(1);
+  // Creates an SVG element with the given attributes.
+  function svg(tag, attrs) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs || {})) node.setAttribute(k, String(v));
+    return node;
   }
 
-  // Turns a family id like "fam_a" into a label like "FAMILY A" (falls back to the raw id uppercased).
-  function familyLabel(id) {
-    const raw = String(id == null ? "" : id);
-    const match = /^fam_(.+)$/i.exec(raw);
-    return match ? "FAMILY " + match[1].toUpperCase() : raw.toUpperCase();
+  // Turns "fam_a" into "A" (falls back to the first character, uppercased).
+  function letter(id) {
+    const m = /^fam_(.+)$/i.exec(String(id));
+    return (m ? m[1] : String(id).charAt(0)).toUpperCase();
   }
 
-  // Turns a family count into "1 FAMILY" / "3 FAMILIES".
-  function familyCountLabel(count) {
-    const n = Number(count) || 0;
-    return n + (n === 1 ? " FAMILY" : " FAMILIES");
+  // Turns "fam_a" into "Family A".
+  function familyName(id) {
+    return "Family " + letter(id);
   }
 
-  // Replaces the body content with a single quiet mono "LOADING…" line.
-  function renderLoading() {
-    body.replaceChildren(el("p", "res-loading", "LOADING…"));
+  // Formats an ISO timestamp as a short month + day, e.g. "Sep 12".
+  function fmtDate(iso) {
+    return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   }
 
-  // Replaces the body content with the quiet "nothing converging yet" empty state.
-  function renderEmpty() {
-    const wrap = el("div", "res-empty");
-    wrap.append(
-      el("p", "res-empty-line", "Nothing is converging yet."),
-      el("p", "microlabel res-empty-label", "Reports will group here once independent families describe the same thing.")
+  // True when an ISO timestamp is within the "just now" window.
+  function isRecent(iso) {
+    return Date.now() - Date.parse(iso) < RECENT_MS;
+  }
+
+  // Singular/plural helper: plural(3, "family", "families") -> "3 families".
+  function plural(n, one, many) {
+    return n + " " + (n === 1 ? one : many);
+  }
+
+  // Maps a family count to its stage name (mirrors the server rule).
+  function stageFor(n) {
+    return n >= 3 ? "converging" : n === 2 ? "echo" : "single";
+  }
+
+  // Returns the currently selected signal, defaulting to the top-ranked one.
+  function selectedSignal() {
+    return state.signals.find((s) => s.category === state.selected) || state.signals[0] || null;
+  }
+
+  // Returns the families whose FIRST report in this signal arrived just now.
+  function newArrivals(sig) {
+    return sig.families.filter((f) => isRecent(f.firstAt));
+  }
+
+  // Describes a stage change caused by a just-arrived family, e.g. "Echo → Converging · just now" (or null).
+  function transitionLabel(sig) {
+    const fresh = newArrivals(sig).length;
+    if (!fresh) return null;
+    const before = stageFor(sig.familyCount - fresh);
+    return before === sig.stage ? null : `${STAGE_NAME[before]} → ${STAGE_NAME[sig.stage]} · just now`;
+  }
+
+  // Renders a small uppercase mono label.
+  function mono(text, className) {
+    return el("div", "res-mono" + (className ? " " + className : ""), text);
+  }
+
+  // Builds one stat card for the strip.
+  function statCard(label, value, note) {
+    const c = el("div", "card res-stat");
+    c.append(mono(label), el("div", "res-stat-value", String(value)), el("div", "res-note", note));
+    return c;
+  }
+
+  // Builds the four-up stat strip from live data.
+  function renderStats() {
+    const today = new Date().toDateString();
+    const addedToday = state.observations.filter((o) => new Date(o.createdAt).toDateString() === today).length;
+    const families = new Set(state.observations.map((o) => o.familyId)).size;
+    const active = state.signals.filter((s) => s.familyCount >= 2).length;
+    const drafted = state.signals.filter((s) => s.draft).length;
+    const strip = el("div", "res-stats");
+    strip.append(
+      statCard("Observations", state.observations.length, addedToday ? `+${addedToday} today` : "none yet today"),
+      statCard("Families", families, "none ever see each other"),
+      statCard("Active signals", active, "2+ independent families"),
+      statCard("Questions drafted", drafted, "awaiting your review"),
     );
-    body.replaceChildren(wrap);
+    return strip;
   }
 
-  // Replaces the body content with a quiet soft-ink error line (no alert).
-  function renderError(text) {
-    body.replaceChildren(el("p", "res-error", text));
+  // Builds one pipeline step tile.
+  function pipeStep(title, count, note, mode) {
+    const li = el("li", "res-step" + (mode ? " res-step--" + mode : ""));
+    li.append(mono(title), el("div", "res-step-count", String(count)), el("div", "res-note", note));
+    return li;
   }
 
-  // Picks a plain-English error line for a failed response status.
-  function errorTextFor(status) {
-    if (status === 503) return "The memory service isn't set up yet, so there is nothing to show here.";
-    if (status === 502) return "The memory service didn't answer just now. Try this tab again in a moment.";
-    return "Something went wrong loading these. Try this tab again in a moment.";
-  }
-
-  // Builds one verbatim quote block: the quote in curly quotes plus its family label (score is never shown).
-  function buildQuote(quote) {
-    const item = el("blockquote", "res-quote");
-    item.append(
-      el("p", "res-quote-text", "“" + String(quote && quote.text != null ? quote.text : "") + "”"),
-      el("p", "res-quote-family", familyLabel(quote && quote.familyId))
+  // Builds the five-step pipeline showing where each signal is heading.
+  function renderPipeline() {
+    const count = (stage) => state.signals.filter((s) => s.stage === stage).length;
+    const fresh = state.signals.some((s) => newArrivals(s).length > 0);
+    const converging = count("converging");
+    const sec = el("section", "card res-pipeline");
+    sec.setAttribute("aria-label", "Signal pipeline");
+    sec.append(mono("Where each signal is heading", "res-pipeline-title"));
+    const list = el("ol", "res-steps");
+    list.append(
+      pipeStep("01 · Single note", count("single"), "1 family"),
+      pipeStep("02 · Echo", count("echo"), "2 families"),
+      pipeStep("03 · Converging", converging, fresh ? "3+ families · new arrival" : "3+ families", converging ? "hot" : ""),
+      pipeStep("04 · Question drafted", state.signals.filter((s) => s.draft).length, "AI drafts an item"),
+      pipeStep("05 · Ready for survey", 0, "you approve → registry", "dashed"),
     );
-    return item;
+    sec.append(list);
+    return sec;
   }
 
-  // Builds the inset box holding the drafted question exactly as received.
-  function buildQuestion(question) {
-    const box = el("div", "res-question");
-    box.append(
-      el("p", "res-question-label", "DRAFT QUESTION"),
-      el("p", "res-question-text", String(question == null ? "" : question))
-    );
-    return box;
+  // Splits a label into two roughly balanced lines for the hub text.
+  function twoLines(label) {
+    const words = label.split(" ");
+    if (words.length < 2) return [label, ""];
+    const mid = Math.ceil(words.length / 2);
+    return [words.slice(0, mid).join(" "), words.slice(mid).join(" ")];
   }
 
-  // Builds one cluster card: theme headline, family count, verbatim quotes, drafted question, hypothesis stamp.
-  function buildCard(cluster) {
-    const card = el("article", "card res-card");
-    const quotes = Array.isArray(cluster && cluster.quotes) ? cluster.quotes : [];
+  // Builds the families ↔ themes SVG graph; each family–theme pair is one line.
+  function renderGraph() {
+    const W = 760, H = 440, FX = 70;
+    const sigs = state.signals;
+    const famIds = [...new Set(sigs.flatMap((s) => s.families.map((f) => f.familyId)))].sort();
+    const famY = new Map(famIds.map((id, i) => [id, (H * (i + 1)) / (famIds.length + 1)]));
+    const radius = (s) => (s === sigs[0] ? 62 : 20 + 9 * s.familyCount); // hero is largest; others scale with family count
+    const pos = new Map();
+    sigs.forEach((s, i) => {
+      if (i === 0) pos.set(s.category, { x: 330, y: H / 2 });
+      else pos.set(s.category, { x: 630, y: (H * i) / sigs.length });
+    });
 
-    const head = el("header", "res-head");
-    head.append(
-      el("p", "microlabel res-count", familyCountLabel(cluster && cluster.familyCount)),
-      el("h2", "res-theme", capitalise(cluster && cluster.theme))
-    );
+    const g = svg("svg", { viewBox: `0 0 ${W} ${H}`, class: "res-graph-svg", role: "img", "aria-label": "Graph of families and the themes they reported" });
+    for (const s of sigs) {
+      const p = pos.get(s.category);
+      for (const f of s.families) {
+        const y1 = famY.get(f.familyId);
+        const recent = s.quotes.some((q) => q.familyId === f.familyId && isRecent(q.createdAt));
+        const mx = FX + (p.x - FX) / 2;
+        const path = svg("path", { d: `M ${FX} ${y1} C ${mx} ${y1}, ${mx} ${p.y}, ${p.x} ${p.y}`, fill: "none" });
+        path.setAttribute("class", "res-edge" + (recent ? " res-edge--new" : s.stage === "converging" ? " res-edge--hot" : ""));
+        g.append(path);
+      }
+    }
+    for (const s of sigs) g.append(hubNode(s, pos.get(s.category), radius(s)));
+    for (const id of famIds) g.append(familyNode(id, FX, famY.get(id), sigs));
+    return g;
+  }
 
-    const list = el("div", "res-quotes");
-    quotes.forEach((q) => list.append(buildQuote(q)));
+  // Builds one clickable theme hub (size = family count, style = stage).
+  function hubNode(sig, p, r) {
+    const node = svg("g", { class: `res-hub res-hub--${sig.stage}` + (sig.category === selectedSignal()?.category ? " is-selected" : ""), tabindex: 0, role: "button" });
+    node.setAttribute("aria-label", `${sig.label}: ${plural(sig.familyCount, "family", "families")}`);
+    if (sig.stage === "converging") node.append(svg("circle", { cx: p.x, cy: p.y, r: r + 14, class: "res-halo" }));
+    node.append(svg("circle", { cx: p.x, cy: p.y, r, class: "res-hub-circle" }));
+    const [a, b] = twoLines(sig.label);
+    const small = r < 44;
+    const t1 = svg("text", { x: p.x, y: p.y - (b ? 4 : -2), class: "res-hub-label", "text-anchor": "middle", "font-size": small ? 13 : 17 });
+    t1.textContent = a;
+    node.append(t1);
+    if (b) {
+      const t2 = svg("text", { x: p.x, y: p.y + (small ? 10 : 14), class: "res-hub-label", "text-anchor": "middle", "font-size": small ? 13 : 17 });
+      t2.textContent = b;
+      node.append(t2);
+    }
+    const c = svg("text", { x: p.x, y: p.y + r - (small ? 12 : 16), class: "res-hub-count", "text-anchor": "middle" });
+    c.textContent = `${sig.familyCount} fam.`;
+    node.append(c);
+    node.addEventListener("click", () => selectSignal(sig.category));
+    node.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); selectSignal(sig.category); } });
+    return node;
+  }
 
-    card.append(head, list, buildQuestion(cluster && cluster.question), el("p", "res-stamp", "HYPOTHESIS, NOT FINDING · AI KNOWLEDGE"));
+  // Builds one family node; highlighted with a "+1 · just now" pill if it just reported.
+  function familyNode(id, x, y, sigs) {
+    const recent = sigs.some((s) => s.quotes.some((q) => q.familyId === id && isRecent(q.createdAt)));
+    const node = svg("g", { class: "res-fam" + (recent ? " res-fam--new" : "") });
+    if (recent) node.append(svg("circle", { cx: x, cy: y, r: 24, class: "res-fam-halo" }));
+    node.append(svg("circle", { cx: x, cy: y, r: 17, class: "res-fam-circle" }));
+    const t = svg("text", { x, y: y + 4, "text-anchor": "middle", class: "res-fam-letter" });
+    t.textContent = letter(id);
+    node.append(t);
+    if (recent) {
+      node.append(svg("rect", { x: x + 28, y: y - 11, width: 78, height: 22, rx: 11, class: "res-pill" }));
+      const pt = svg("text", { x: x + 67, y: y + 4, "text-anchor": "middle", class: "res-pill-text" });
+      pt.textContent = "+1 · just now";
+      node.append(pt);
+    }
+    return node;
+  }
+
+  // Wraps the graph with its title, legend and explanatory footnote.
+  function renderGraphCard() {
+    const card = el("section", "card res-graph-card");
+    card.setAttribute("aria-label", "Signal graph");
+    const head = el("div", "res-graph-head");
+    const title = el("div");
+    title.append(mono("Signal graph"), el("div", "res-h3", "Families ↔ what they noticed"));
+    const legend = el("div", "res-legend");
+    for (const [cls, text] of [["res-key-family", "Family"], ["res-key-theme", "Theme"], ["res-key-new", "Just now"]]) {
+      const k = el("span", "res-key");
+      k.append(el("span", cls), document.createTextNode(text));
+      legend.append(k);
+    }
+    head.append(title, legend);
+    const stage = el("div", "res-graph-stage");
+    stage.append(renderGraph());
+    const foot = el("div", "res-note");
+    foot.append(document.createTextNode("Each line is a family that reported a theme. A theme grows when "), el("em", null, "independent"), document.createTextNode(" families describe the same change — a family never counts twice."));
+    card.append(head, stage, foot);
     return card;
   }
 
-  // Replaces the body content with one card per cluster, in the order given.
-  function renderClusters(clusters) {
-    const stack = el("div", "res-stack");
-    clusters.forEach((c) => stack.append(buildCard(c)));
-    body.replaceChildren(stack);
+  // Builds the "when each family noticed" timeline, one dot per family at its first report.
+  function renderTimeline(sig) {
+    const wrap = el("div");
+    wrap.append(mono("When each family noticed", "res-block-title"));
+    const track = el("div", "res-timeline");
+    track.append(el("div", "res-timeline-line"));
+    const t0 = Date.parse(sig.firstAt), span = Math.max(1, Date.parse(sig.lastAt) - t0);
+    let prev = -100, row = 0;
+    for (const f of sig.families.slice().sort((a, b) => a.firstAt.localeCompare(b.firstAt))) {
+      const pct = sig.families.length === 1 || span === 1 ? 50 : 4 + ((Date.parse(f.firstAt) - t0) / span) * 92;
+      row = pct - prev < 16 ? 1 - row : 0; // stagger labels that would collide
+      prev = pct;
+      const fresh = isRecent(f.firstAt);
+      const pt = el("div", "res-tl-point" + (fresh ? " is-new" : ""));
+      pt.style.left = pct + "%";
+      pt.append(el("span", "res-tl-dot"), el("span", "res-tl-label", `${letter(f.familyId)} · ${fresh ? "Today" : fmtDate(f.firstAt)}`));
+      if (row) pt.classList.add("is-low");
+      track.append(pt);
+    }
+    wrap.append(track);
+    return wrap;
   }
 
-  // Fetches /api/clusters and renders the result, ignoring any response that is no longer the latest request.
+  // Builds the verbatim quote list, newest first.
+  function renderQuotes(sig) {
+    const wrap = el("div", "res-quotes");
+    wrap.append(mono("In their words · verbatim"));
+    for (const q of sig.quotes.slice(0, 6)) {
+      const fresh = isRecent(q.createdAt);
+      const b = el("blockquote", "res-quote" + (fresh ? " is-new" : ""));
+      b.append(el("span", "res-quote-text", `“${q.text}”`), el("span", "res-quote-from", `${familyName(q.familyId)}${fresh ? " · new" : ""}`));
+      wrap.append(b);
+    }
+    if (sig.quotes.length > 6) wrap.append(el("div", "res-note", `+ ${sig.quotes.length - 6} more`));
+    return wrap;
+  }
+
+  // Builds the draft-questionnaire box (or a quiet explanation when no item is drafted) with the stamp.
+  function renderDraft(sig) {
+    const box = el("div", "res-draft");
+    if (sig.draft) {
+      box.append(mono("Draft questionnaire item", "res-accent"), el("div", "res-draft-item", `“${sig.draft.item}”`), el("div", "res-note", sig.draft.question));
+    } else {
+      box.append(mono("Draft questionnaire item"), el("div", "res-note", sig.watched ? "Nothing drafted yet — a draft appears once 2+ independent families report this theme." : "Not drafted — this theme isn't on the watch list."));
+    }
+    const row = el("div", "res-draft-row");
+    row.append(el("span", "res-stamp res-mono", "Hypothesis, not finding · AI knowledge"));
+    if (sig.draft) {
+      const btn = el("button", "res-gold", "Add to next questionnaire");
+      btn.type = "button";
+      btn.addEventListener("click", () => window.SignalSense.toast("QUESTIONNAIRE REGISTRY — COMING SOON"));
+      row.append(btn);
+    }
+    box.append(row);
+    return box;
+  }
+
+  // Builds the selected-signal detail panel.
+  function renderDetail(sig) {
+    const card = el("section", "card res-detail" + (sig.stage === "converging" ? " is-hot" : ""));
+    card.id = "res-detail";
+    card.setAttribute("aria-label", "Selected signal");
+    const chips = el("div", "res-chips");
+    chips.append(el("span", `res-chip res-chip--${sig.stage} res-mono`, STAGE_NAME[sig.stage]));
+    const tr = transitionLabel(sig);
+    if (tr) chips.append(el("span", "res-chip res-chip--transition res-mono", tr));
+    const days = Math.max(1, Math.round((Date.parse(sig.lastAt) - Date.parse(sig.firstAt)) / 86400000));
+    const head = el("div");
+    head.append(mono(sig.area), el("h2", "res-h2", sig.label), el("div", "res-note", `${plural(sig.familyCount, "independent family", "independent families")} · ${plural(sig.reportCount, "report", "reports")} · ${plural(days, "day", "days")}`));
+    card.append(chips, head, renderTimeline(sig), renderQuotes(sig), renderDraft(sig));
+    return card;
+  }
+
+  // Selects a signal, re-renders the dashboard, and brings the detail panel into view.
+  function selectSignal(category) {
+    state.selected = category;
+    render();
+    document.getElementById("res-detail")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
+
+  // Builds the "other signals" grid (every signal except the selected one).
+  function renderOthers(sel) {
+    const others = state.signals.filter((s) => s !== sel);
+    if (!others.length) return null;
+    const sec = el("section", "res-others");
+    sec.append(mono("Other signals"));
+    const grid = el("div", "res-others-grid");
+    for (const s of others) {
+      const card = el("button", "card res-other");
+      card.type = "button";
+      card.append(
+        el("span", `res-chip res-chip--${s.stage} res-mono`, STAGE_NAME[s.stage]),
+        el("div", "res-other-title", s.label),
+        el("div", "res-other-quote", `“${s.quotes[0].text}”`),
+        mono(s.familyCount === 1 ? `${familyName(s.families[0].familyId)} · watching` : "Families " + s.families.map((f) => letter(f.familyId)).join(" · ")),
+      );
+      card.addEventListener("click", () => selectSignal(s.category));
+      grid.append(card);
+    }
+    sec.append(grid);
+    return sec;
+  }
+
+  // Builds the "What's converging" pane.
+  function renderConverging() {
+    const pane = el("div", "res-pane");
+    const head = el("div", "res-head");
+    const left = el("div");
+    left.append(mono("What's converging", "res-accent"));
+    const h1 = el("h1", "res-h1");
+    h1.append(document.createTextNode("Different families, "), el("em", null, "different words,"), document.createTextNode(" one pattern."));
+    left.append(h1);
+    head.append(left, mono(`Updated ${updatedText()} · Mem0 memory`));
+    pane.append(head);
+    if (!state.signals.length) {
+      pane.append(el("p", "res-empty", "Nothing is converging yet."));
+      return pane;
+    }
+    const sel = selectedSignal();
+    const split = el("div", "res-split");
+    split.append(renderGraphCard(), renderDetail(sel));
+    pane.append(renderStats(), renderPipeline(), split);
+    const others = renderOthers(sel);
+    if (others) pane.append(others);
+    return pane;
+  }
+
+  // Returns "just now" / "N min ago" for the last successful load.
+  function updatedText() {
+    const mins = Math.floor((Date.now() - state.loadedAt) / 60000);
+    return mins < 1 ? "just now" : plural(mins, "min", "min") + " ago";
+  }
+
+  // Builds the "Observations" pane: every observation, newest first, tagged with its theme.
+  function renderObservations() {
+    const pane = el("div", "res-pane");
+    pane.append(mono("Observations", "res-accent"), el("h1", "res-h1 res-h1--sm", `${state.observations.length} reports, in their own words.`));
+    const label = new Map();
+    for (const s of state.signals) for (const q of s.quotes) label.set(q.observationId, s.label);
+    const list = el("div", "res-list");
+    for (const o of state.observations.slice().sort((a, b) => b.createdAt.localeCompare(a.createdAt))) {
+      const row = el("div", "card res-row");
+      row.append(el("div", "res-row-text", `“${o.text}”`));
+      const meta = el("div", "res-row-meta");
+      meta.append(mono(`${familyName(o.familyId)} · ${fmtDate(o.createdAt)}`), mono(label.get(o.id) || "Not categorized yet"));
+      row.append(meta);
+      list.append(row);
+    }
+    pane.append(list);
+    return pane;
+  }
+
+  // Builds the "Draft questions" pane: every drafted item with its stamp.
+  function renderDrafts() {
+    const pane = el("div", "res-pane");
+    const drafted = state.signals.filter((s) => s.draft);
+    pane.append(mono("Draft questions", "res-accent"), el("h1", "res-h1 res-h1--sm", drafted.length ? "Awaiting your review." : "No questions drafted yet."));
+    for (const s of drafted) {
+      const card = el("div", "card res-row res-draft-card");
+      card.append(mono(s.label), el("div", "res-draft-item", `“${s.draft.item}”`), el("div", "res-note", s.draft.question), el("span", "res-stamp res-mono", "Hypothesis, not finding · AI knowledge"));
+      pane.append(card);
+    }
+    return pane;
+  }
+
+  // Builds the left sidebar: view navigation and the community card.
+  function renderSidebar() {
+    const side = el("aside", "res-side");
+    const nav = el("nav", "card res-nav");
+    nav.setAttribute("aria-label", "Researcher sections");
+    nav.append(mono("Researcher view", "res-nav-title"));
+    const items = [
+      ["converging", "What's converging", state.signals.filter((s) => s.familyCount >= 2).length],
+      ["observations", "Observations", state.observations.length],
+      ["drafts", "Draft questions", state.signals.filter((s) => s.draft).length],
+      ["insights", "Community insights", null],
+    ];
+    for (const [key, text, n] of items) {
+      const b = el("button", "res-navitem" + (state.pane === key ? " is-active" : ""));
+      b.type = "button";
+      if (state.pane === key) b.setAttribute("aria-current", "page");
+      b.append(el("span", null, text));
+      if (n != null) b.append(el("span", "res-mono res-navcount", String(n)));
+      b.addEventListener("click", () => {
+        if (key === "insights") return window.SignalSense.toast("COMMUNITY INSIGHTS — COMING SOON");
+        state.pane = key;
+        render();
+      });
+      nav.append(b);
+    }
+    const families = new Set(state.observations.map((o) => o.familyId)).size;
+    const community = el("div", "card res-community");
+    community.append(mono("Community"), el("div", "res-community-name", "Demo community"), el("div", "res-note", `${plural(families, "family", "families")} · anonymous IDs · demo data`));
+    side.append(nav, community);
+    return side;
+  }
+
+  // Redraws the whole dashboard from the current state.
+  function render() {
+    const layout = el("div", "res-layout");
+    layout.append(renderSidebar());
+    const main = el("main", "res-main");
+    if (state.status === "loading") main.append(el("p", "res-empty", "LOADING…"));
+    else if (state.status === "error") main.append(el("p", "res-empty", state.error));
+    else {
+      main.append(state.pane === "observations" ? renderObservations() : state.pane === "drafts" ? renderDrafts() : renderConverging());
+      main.append(el("div", "res-footnote res-mono", "No diagnoses · no medical advice · families never see each other's identity"));
+    }
+    layout.append(main);
+    root.replaceChildren(layout);
+  }
+
+  // Fetches signals and observations together and renders; only the newest request may render.
   async function load() {
-    const myRequest = ++latestRequest;
-    if (!body.firstChild || body.querySelector(".res-error, .res-empty")) renderLoading();
+    const mine = ++latestRequest;
+    if (!state.loadedAt) { state.status = "loading"; render(); }
     try {
-      const res = await fetch("/api/clusters", { headers: { Accept: "application/json" } });
-      let data = null;
-      try { data = await res.json(); } catch (e) { data = null; }
-      if (myRequest !== latestRequest) return;
-      if (!res.ok) return renderError(errorTextFor(res.status));
-      const clusters = data && Array.isArray(data.clusters) ? data.clusters : [];
-      if (clusters.length === 0) return renderEmpty();
-      renderClusters(clusters);
-    } catch (e) {
-      if (myRequest !== latestRequest) return;
-      renderError("Couldn't reach the server. Check your connection and try this tab again.");
+      const [sRes, oRes] = await Promise.all([fetch("/api/signals"), fetch("/api/observations")]);
+      if (mine !== latestRequest) return;
+      if (!sRes.ok) {
+        state.status = "error";
+        state.error = sRes.status === 503 ? "The memory service isn't connected, so there is nothing to show yet." : "Couldn't load signals just now. Try again in a moment.";
+        return render();
+      }
+      const data = await sRes.json();
+      state.signals = data.signals;
+      state.observations = await oRes.json();
+      state.loadedAt = Date.now();
+      state.status = "ready";
+      if (!state.signals.some((s) => s.category === state.selected)) state.selected = state.signals[0]?.category ?? null;
+      render();
+    } catch {
+      if (mine !== latestRequest) return;
+      state.status = "error";
+      state.error = "Couldn't reach the server. Check your connection and try again.";
+      render();
     }
   }
 
-  // Builds the static skeleton (eyebrow + content container) inside the researcher panel, once.
-  function mount(root) {
-    root.append(el("p", "eyebrow", "WHAT’S CONVERGING"));
-    body = el("div", "res-body");
-    body.setAttribute("aria-live", "polite");
-    root.append(body);
-  }
-
-  // Called every time the RESEARCHER tab is selected: re-fetches so new posts show up.
-  function onShow() {
-    load();
-  }
-
-  window.SignalSense.registerView("researcher", { mount, onShow });
+  window.SignalSense.registerView("researcher", {
+    mount(r) { root = r; render(); },
+    onShow() { load(); },
+  });
 })();

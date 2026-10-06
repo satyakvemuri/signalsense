@@ -41,3 +41,39 @@ export interface Cluster {
 export interface ClustersResponse {
   clusters: Cluster[];
 }
+
+// One verbatim observation shown under a signal, newest first.
+export interface SignalQuote {
+  observationId: string;
+  familyId: string;
+  text: string;
+  createdAt: string;
+}
+
+// How far a signal has travelled: one family, two independent families, or three or more.
+export type SignalStage = "single" | "echo" | "converging";
+
+// A functional domain (Mem0 category) with every family that reported it.
+export interface Signal {
+  category: string;
+  label: string;
+  area: string;
+  watched: boolean;
+  stage: SignalStage;
+  familyCount: number;
+  reportCount: number;
+  firstAt: string;
+  lastAt: string;
+  families: { familyId: string; firstAt: string }[]; // each family once, with when it first reported
+  quotes: SignalQuote[]; // verbatim, newest first
+  draft: { item: string; question: string } | null; // only for watched signals with 2+ families
+}
+
+// Body returned by GET /api/signals.
+export interface SignalsResponse {
+  generatedAt: string;
+  observationCount: number;
+  familyCount: number;
+  uncategorized: number; // observations Mem0 has not categorized yet
+  signals: Signal[]; // most families first, then most recent
+}

@@ -23,6 +23,7 @@
   function selectView(name) {
     document.querySelectorAll(".tab").forEach((t) => t.setAttribute("aria-selected", String(t.dataset.view === name)));
     for (const [n, v] of Object.entries(views)) v.root.hidden = n !== name;
+    document.querySelector(".shell").classList.toggle("shell--wide", name === "researcher"); // dashboard needs the room
     views[name]?.onShow?.();
   }
 

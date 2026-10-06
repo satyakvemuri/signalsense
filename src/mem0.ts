@@ -23,6 +23,7 @@ export interface MemoryService {
   awaitMemory(observation: Observation, timeoutMs: number): Promise<StoredMemory | null>;
   search(query: string, familyIds: string[]): Promise<MemoryHit[]>;
   syncedObservationIds(familyId: string): Promise<Set<string>>;
+  categoriesByObservation(familyIds: string[]): Promise<Map<string, string[]>>;
 }
 
 const SEARCH_TOP_K = 20;
@@ -97,6 +98,22 @@ export function createMem0Service(apiKey: string): MemoryService {
         categories: readCategories(r.categories),
         observationId: readObservationId(r.metadata),
       }));
+    },
+
+    // Maps every stored observation id to the categories Mem0 gave it (pages through each family).
+    async categoriesByObservation(familyIds) {
+      const out = new Map<string, string[]>();
+      for (const familyId of familyIds) {
+        for (let page = 1; ; page++) {
+          const res = await client.getAll({ filters: { user_id: familyId }, page, pageSize: 100 });
+          for (const r of res.results ?? []) {
+            const id = readObservationId(r.metadata);
+            if (id) out.set(id, readCategories(r.categories));
+          }
+          if (!res.next) break;
+        }
+      }
+      return out;
     },
 
     // Lists the observation ids already stored in Mem0 for one family (used to skip re-syncing).

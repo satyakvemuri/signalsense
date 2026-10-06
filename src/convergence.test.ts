@@ -41,6 +41,7 @@ function fakeMem(own: StoredMemory | null, hits: MemoryHit[]): MemoryService & {
     awaitMemory: async () => own,
     search: async (q) => (searches.push(q), hits),
     syncedObservationIds: async () => new Set(),
+    categoriesByObservation: async () => new Map(),
   };
 }
 
