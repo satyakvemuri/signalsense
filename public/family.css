@@ -1,0 +1,92 @@
+/* FAMILY view styles. All classes are prefixed fam-. Tokens and .eyebrow/.microlabel/.card come from shared.css. */
+
+/* Family dropdown: quiet, paper background, hairline border */
+.fam-select-wrap { margin: 0 0 14px; }
+.fam-select {
+  appearance: none; -webkit-appearance: none;
+  min-height: 40px; padding: 0 36px 0 12px;
+  font: 400 15px/1 var(--sans); color: var(--ink);
+  background-color: var(--paper);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%235a564d' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat; background-position: right 12px center;
+  border: 1px solid var(--line); border-radius: 8px; cursor: pointer;
+}
+.fam-select:focus-visible { outline: 2px solid var(--terra); outline-offset: 2px; }
+
+/* Capture card */
+.fam-form { margin: 0; }
+.fam-capture-card { padding: 18px 18px 14px; }
+.fam-textarea {
+  display: block; width: 100%; min-height: 140px; margin: 0; padding: 0;
+  font: 400 22px/1.35 var(--serif); color: var(--ink);
+  background: transparent; border: 0; outline: 0; resize: none; box-shadow: none; border-radius: 0;
+}
+.fam-textarea::placeholder { color: var(--soft); opacity: 0.8; }
+
+.fam-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 10px; }
+.fam-modes { display: flex; gap: 8px; }
+
+/* Ghost capture buttons: stub look (muted) but still tappable */
+.fam-capture {
+  appearance: none; -webkit-appearance: none;
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 40px; height: 40px; padding: 0; cursor: pointer;
+  color: var(--soft); opacity: 0.7;
+  background: transparent; border: 1px solid var(--line); border-radius: 8px;
+}
+.fam-capture:hover { opacity: 1; }
+.fam-capture:focus-visible { outline: 2px solid var(--terra); outline-offset: 2px; opacity: 1; }
+.fam-capture svg { display: block; }
+
+/* Primary button: the only gold gradient on the page */
+.fam-submit {
+  appearance: none; -webkit-appearance: none;
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 0 22px; cursor: pointer;
+  font: 500 15px/1 var(--sans); color: var(--ink);
+  background: var(--gold); border: 0; border-radius: 10px;
+  box-shadow: 0 1px 2px rgba(26, 25, 22, 0.12);
+}
+.fam-submit:focus-visible { outline: 2px solid var(--terra); outline-offset: 2px; }
+.fam-submit:disabled { cursor: default; opacity: 0.8; }
+.fam-submit.is-busy::before {
+  content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--ink);
+  animation: fam-pulse 1.4s ease-in-out infinite;
+}
+@keyframes fam-pulse { 0%, 100% { opacity: 0.25; } 50% { opacity: 0.9; } }
+
+/* Quiet message line under the card */
+.fam-note {
+  margin: 10px 2px 0; min-height: 0;
+  font: 400 11px/1.5 var(--mono); letter-spacing: 0.08em; color: var(--terra);
+}
+.fam-note:empty { display: none; }
+
+/* Results: echo (quiet) then reveal (the peak) */
+.fam-results { margin-top: 20px; display: flex; flex-direction: column; gap: 14px; }
+.fam-results:empty { display: none; }
+
+.fam-echo { padding: 14px 18px 16px; box-shadow: none; background: var(--card); }
+.fam-echo-label { display: block; margin: 0 0 8px; }
+.fam-echo-text {
+  margin: 0; font: 400 20px/1.35 var(--serif); color: var(--soft);
+  overflow-wrap: anywhere; white-space: pre-wrap;
+}
+
+.fam-reveal {
+  padding: 22px 22px 24px; border-left: 3px solid var(--terra);
+  animation: fam-reveal-in 0.9s ease-out both;
+}
+.fam-reveal-text { margin: 0; font: 400 28px/1.25 var(--serif); color: var(--ink); }
+.fam-reveal-text em { font-style: italic; color: var(--terra); }
+@keyframes fam-reveal-in { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+@media (prefers-reduced-motion: reduce) {
+  .fam-reveal { animation: none; }
+  .fam-submit.is-busy::before { animation: none; opacity: 0.6; }
+}
+
+@media (max-width: 480px) {
+  .fam-reveal-text { font-size: 25px; }
+  .fam-textarea { font-size: 21px; }
+}

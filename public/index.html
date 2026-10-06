@@ -4,165 +4,33 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>SignalSense</title>
-  <style>
-    :root { --bg:#faf8f5; --fg:#2a2a2a; --muted:#6b6b6b; --card:#fff; --line:#e6e1d8; --accent:#3d6b5e; }
-    @media (prefers-color-scheme: dark) {
-      :root { --bg:#161816; --fg:#ececec; --muted:#9a9a9a; --card:#1f221f; --line:#2f332f; --accent:#7fb5a4; }
-    }
-    * { box-sizing: border-box; }
-    body { margin:0; background:var(--bg); color:var(--fg); font:16px/1.5 system-ui, sans-serif; }
-    main { max-width:720px; margin:0 auto; padding:32px 16px 64px; }
-    h1 { margin:0 0 4px; font-size:1.6rem; }
-    .sub { margin:0 0 24px; color:var(--muted); }
-    form, .obs { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px 16px; }
-    form { display:grid; gap:10px; margin-bottom:20px; }
-    select, textarea, button { font:inherit; color:inherit; border:1px solid var(--line); border-radius:8px; padding:8px 10px; background:var(--bg); }
-    button { background:var(--accent); color:#fff; border-color:var(--accent); cursor:pointer; }
-    textarea { min-height:72px; resize:vertical; }
-    .bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; gap:12px; }
-    ul { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
-    .meta { display:flex; gap:10px; font-size:.82rem; color:var(--muted); margin-bottom:4px; }
-    .fam { font-weight:600; color:var(--accent); }
-    .note { background:var(--card); border:1px solid var(--accent); border-radius:10px; padding:12px 16px; margin:0 0 20px; }
-    .note:empty { display:none; }
-    .note h2 { margin:0 0 6px; font-size:1rem; }
-    .note blockquote { margin:6px 0; padding-left:10px; border-left:3px solid var(--line); }
-    .note .q { color:var(--muted); font-style:italic; margin:8px 0 0; }
-    .err { color:#b3261e; min-height:1.2em; margin:0; font-size:.9rem; }
-  </style>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Geist:wght@400;500;600&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/shared.css" />
+  <link rel="stylesheet" href="/family.css" />
+  <link rel="stylesheet" href="/researcher.css" />
 </head>
 <body>
-  <main>
-    <h1>SignalSense</h1>
-    <p class="sub">Anonymous family observations. Patterns can hide in different words.</p>
+  <main class="shell">
+    <header class="brand">
+      <div class="wordmark"><span class="dot" aria-hidden="true"></span><span class="name">Signal<em>Sense</em></span></div>
+      <p class="tagline">Firsthand signals, caught before they fade.</p>
+    </header>
 
-    <form id="add">
-      <select id="family" aria-label="Family">
-        <option value="fam_a">fam_a</option><option value="fam_b">fam_b</option><option value="fam_c">fam_c</option>
-      </select>
-      <textarea id="text" placeholder="What did you notice?" required></textarea>
-      <p class="err" id="err" role="alert"></p>
-      <button type="submit">Add observation</button>
-    </form>
+    <nav class="tabs" role="tablist" aria-label="View">
+      <button class="tab" role="tab" id="tab-family" aria-controls="view-family" aria-selected="true" data-view="family">FAMILY</button>
+      <button class="tab" role="tab" id="tab-researcher" aria-controls="view-researcher" aria-selected="false" data-view="researcher">RESEARCHER</button>
+    </nav>
 
-    <section id="convergence" class="note" aria-live="polite"></section>
-    <section id="clusters"></section>
-
-    <div class="bar">
-      <strong id="count"></strong>
-      <select id="filter" aria-label="Filter by family">
-        <option value="">All families</option>
-        <option value="fam_a">fam_a</option><option value="fam_b">fam_b</option><option value="fam_c">fam_c</option>
-      </select>
-    </div>
-    <ul id="list"></ul>
+    <section id="view-family" role="tabpanel" aria-labelledby="tab-family"></section>
+    <section id="view-researcher" role="tabpanel" aria-labelledby="tab-researcher" hidden></section>
   </main>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
+  <div id="toasts" aria-live="polite"></div>
 
-    // Fetch observations from the API, optionally filtered to one family.
-    async function fetchObservations(familyId) {
-      const qs = familyId ? `?familyId=${encodeURIComponent(familyId)}` : "";
-      const res = await fetch(`/api/observations${qs}`);
-      if (!res.ok) throw new Error(`GET failed (${res.status})`);
-      return res.json();
-    }
-
-    // Build one observation card using textContent so user text is never parsed as HTML.
-    function renderItem(o) {
-      const li = document.createElement("li");
-      li.className = "obs";
-      const meta = document.createElement("div");
-      meta.className = "meta";
-      const fam = document.createElement("span");
-      fam.className = "fam";
-      fam.textContent = o.familyId;
-      const when = document.createElement("span");
-      when.textContent = new Date(o.createdAt).toLocaleDateString();
-      meta.append(fam, when);
-      const body = document.createElement("div");
-      body.textContent = o.text;
-      li.append(meta, body);
-      return li;
-    }
-
-    // Reload the list for the current filter and redraw it.
-    async function refresh() {
-      const items = await fetchObservations($("filter").value);
-      $("count").textContent = `${items.length} observation${items.length === 1 ? "" : "s"}`;
-      $("list").replaceChildren(...items.map(renderItem));
-    }
-
-    // Draw a titled box of verbatim quotes (one per family) into the given container.
-    function renderQuotes(container, title, quotes, footer) {
-      const h = document.createElement("h2");
-      h.textContent = title;
-      container.append(h);
-      for (const m of quotes) {
-        const q = document.createElement("blockquote");
-        q.textContent = `“${m.text}” — ${m.familyId}`;
-        container.append(q);
-      }
-      if (footer) {
-        const f = document.createElement("p");
-        f.className = "q";
-        f.textContent = footer;
-        container.append(f);
-      }
-    }
-
-    // Show who else described something similar to what was just posted.
-    function renderConvergence(c) {
-      const box = $("convergence");
-      box.replaceChildren();
-      if (!c.available) {
-        box.textContent = "Saved. Similarity lookup is not available right now.";
-      } else if (c.count === 0) {
-        box.textContent = "Saved. No other family has described anything similar yet.";
-      } else {
-        renderQuotes(box, `${c.count} other famil${c.count === 1 ? "y" : "ies"} described something similar`, c.matches);
-      }
-    }
-
-    // Load themes reported by 2+ families and draw each with its quotes and drafted question.
-    async function refreshClusters() {
-      const box = $("clusters");
-      const res = await fetch("/api/clusters");
-      if (!res.ok) { box.replaceChildren(); return; }
-      const { clusters } = await res.json();
-      box.replaceChildren(...clusters.map((c) => {
-        const el = document.createElement("div");
-        el.className = "note";
-        renderQuotes(el, `Emerging pattern: ${c.theme}`, c.quotes, c.question);
-        return el;
-      }));
-    }
-
-    // Post a new observation, show any cross-family similarity, then refresh the list and patterns.
-    async function submitObservation(e) {
-      e.preventDefault();
-      $("err").textContent = "";
-      const res = await fetch("/api/observations", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ familyId: $("family").value, text: $("text").value }),
-      });
-      if (!res.ok) {
-        $("err").textContent = (await res.json()).error ?? "Could not save.";
-        return;
-      }
-      const { convergence } = await res.json();
-      $("text").value = "";
-      renderConvergence(convergence);
-      await refresh();
-      await refreshClusters();
-    }
-
-    $("add").addEventListener("submit", submitObservation);
-    $("filter").addEventListener("change", refresh);
-    refresh().catch((err) => { $("err").textContent = err.message; });
-    refreshClusters().catch(() => {});
-  </script>
+  <script src="/app.js"></script>
+  <script src="/family.js"></script>
+  <script src="/researcher.js"></script>
 </body>
 </html>

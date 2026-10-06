@@ -1,0 +1,42 @@
+/* Researcher view. Flat, editorial, no gradients. All classes prefixed res-. */
+
+.res-stack { display: flex; flex-direction: column; gap: 20px; }
+
+.res-card { padding: 24px 22px 20px; }
+
+/* Header: family count microlabel above the serif theme headline */
+.res-head { margin: 0 0 20px; }
+.res-count { margin: 0 0 10px; }
+.res-theme { margin: 0; font: 400 30px/1.15 var(--serif); letter-spacing: -0.01em; color: var(--ink); overflow-wrap: anywhere; }
+
+/* Verbatim quotes */
+.res-quotes { display: flex; flex-direction: column; gap: 18px; margin: 0 0 22px; }
+.res-quote { margin: 0; padding: 0 0 0 14px; border-left: 2px solid var(--line); }
+.res-quote-text { margin: 0; font: 400 20px/1.3 var(--serif); color: var(--ink); overflow-wrap: anywhere; }
+.res-quote-family { margin: 8px 0 0; font: 400 10px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+
+/* Inset drafted question */
+.res-question { background: var(--paper-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px; margin: 0 0 18px; }
+.res-question-label { margin: 0 0 8px; font: 400 10px/1 var(--mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--soft); }
+.res-question-text { margin: 0; font: 400 15px/1.5 var(--sans); color: var(--ink); overflow-wrap: anywhere; }
+
+/* Stamp at the bottom of every card */
+.res-stamp {
+  display: inline-block; max-width: 100%; margin: 0; padding: 4px 8px;
+  font: 500 10px/1.4 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--terra);
+  border: 1px solid rgba(200, 65, 26, 0.4); border-radius: 4px;
+  overflow-wrap: anywhere;
+}
+
+/* Loading / empty / error states */
+.res-loading { margin: 0; font: 400 11px/1 var(--mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--soft); }
+.res-empty { padding: 24px 0; }
+.res-empty-line { margin: 0 0 12px; font: italic 400 26px/1.2 var(--serif); color: var(--soft); }
+.res-empty-label { margin: 0; line-height: 1.5; }
+.res-error { margin: 0; padding: 8px 0; font: 400 15px/1.5 var(--sans); color: var(--soft); }
+
+@media (max-width: 480px) {
+  .res-card { padding: 20px 16px 16px; }
+  .res-theme { font-size: 26px; }
+  .res-quote-text { font-size: 19px; }
+}
