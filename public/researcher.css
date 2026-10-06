@@ -55,7 +55,8 @@
 
 /* Graph + detail */
 .res-split { display: flex; flex-wrap: wrap; gap: 20px; align-items: flex-start; }
-.res-graph-card { flex: 3 1 520px; min-width: 0; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+.res-left { flex: 3 1 520px; min-width: 0; display: flex; flex-direction: column; gap: 20px; }
+.res-graph-card { min-width: 0; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
 .res-graph-head { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 10px; align-items: baseline; }
 .res-legend { display: flex; gap: 14px; font-size: 12px; color: var(--soft); flex-wrap: wrap; }
 .res-key { display: flex; align-items: center; gap: 6px; }
@@ -182,3 +183,39 @@
   .res-contexts-grid { grid-template-columns: 1fr; }
 }
 @media (max-width: 480px) { .res-rail { flex-direction: column; } }
+
+/* Next steps panel + progress indicator */
+.res-next { padding: 20px 22px; display: flex; flex-direction: column; gap: 14px; }
+.res-nsteps { list-style: none; margin: 4px 0 0; padding: 0; display: flex; flex-direction: column; gap: 0; }
+.res-nstep { position: relative; display: flex; gap: 14px; padding: 0 0 18px; }
+.res-nstep:last-child { padding-bottom: 0; }
+.res-nstep:not(:last-child)::before { content: ""; position: absolute; left: 13px; top: 28px; bottom: 2px; border-left: 1px solid var(--line); }
+.res-nstep-n { flex: none; width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font: 500 13px/1 var(--sans); background: var(--paper-2); color: var(--muted); border: 1px solid var(--line); }
+.res-nstep-name { margin-bottom: 2px; color: var(--muted); }
+.res-nstep.is-done .res-nstep-n { background: var(--ink); border-color: var(--ink); color: var(--card); }
+.res-nstep.is-done .res-nstep-name { color: var(--ink); }
+.res-nstep.is-current .res-nstep-n { background: var(--terra); border-color: var(--terra); color: var(--card); }
+.res-nstep.is-current .res-nstep-name { color: var(--terra-ink); }
+
+.res-gold--wide { width: 100%; text-align: left; display: flex; justify-content: space-between; }
+.res-gold:disabled { opacity: 0.45; cursor: default; }
+.res-approved { display: flex; align-items: center; justify-content: space-between; gap: 10px; border: 1px solid var(--terra-line); background: var(--terra-tint); border-radius: 10px; padding: 12px 14px; }
+.res-approved-text { font: 500 14px/1.3 var(--sans); color: var(--terra-ink); }
+.res-undo { appearance: none; background: none; border: 0; cursor: pointer; text-decoration: underline; padding: 4px; }
+.res-undo:focus-visible { outline: 2px solid var(--terra); outline-offset: 2px; }
+.res-chip--ready { border-color: var(--terra-line); background: var(--card); color: var(--terra-ink); margin-bottom: 4px; }
+.res-status-title { border-top: 1px solid var(--line); padding-top: 14px; margin-top: 4px; }
+
+.res-progress { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 4px; }
+.res-pg { position: relative; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 4px; color: var(--muted); }
+.res-pg:not(:last-child)::after { content: ""; position: absolute; top: 9px; left: calc(50% + 12px); right: calc(-50% + 12px); border-top: 2px solid var(--line); }
+.res-pg.is-done:not(:last-child)::after { border-top-color: var(--terra); }
+.res-pg-dot { position: relative; z-index: 1; width: 18px; height: 18px; border-radius: 50%; border: 1.5px solid var(--dash); background: var(--card); display: flex; align-items: center; justify-content: center; font: 500 10px/1 var(--sans); color: var(--card); }
+.res-pg.is-done .res-pg-dot { background: var(--terra); border-color: var(--terra); }
+.res-pg.is-current .res-pg-dot { border-color: var(--terra); box-shadow: 0 0 0 4px rgba(200, 65, 26, 0.16); }
+.res-pg.is-current .res-pg-dot::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--terra); }
+.res-pg-name { font: 500 12px/1.2 var(--sans); }
+.res-pg.is-done, .res-pg.is-current { color: var(--ink); }
+.res-pg.is-current .res-pg-name { color: var(--terra-ink); }
+.res-pg-sub { font-size: 9px; min-height: 12px; }
+@media (max-width: 480px) { .res-pg-name { font-size: 11px; } .res-pg-sub { letter-spacing: 0.04em; } }

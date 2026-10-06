@@ -7,6 +7,31 @@
   const state = { signals: [], observations: [], pane: "converging", selected: null, loadedAt: null, status: "loading" };
   let root = null;
   let latestRequest = 0; // so only the newest fetch may render
+  const STORE_KEY = "signalsense.readyForSurvey";
+
+  // Reads the set of signals already moved to Community Validation (empty if browser storage is unavailable).
+  function loadReady() {
+    try {
+      return new Set(JSON.parse(localStorage.getItem(STORE_KEY) || "[]"));
+    } catch {
+      return new Set();
+    }
+  }
+  const ready = loadReady(); // categories moved to Community Validation / Ready for survey
+
+  // Saves the Community Validation set; silently skipped if browser storage is unavailable.
+  function saveReady() {
+    try {
+      localStorage.setItem(STORE_KEY, JSON.stringify([...ready]));
+    } catch {
+      /* storage blocked: the change still holds for this page visit */
+    }
+  }
+
+  // True when this signal has a drafted question AND has been moved to Community Validation.
+  function isReady(sig) {
+    return Boolean(sig.draft) && ready.has(sig.category);
+  }
 
   // Creates an element with an optional class and text (text always goes in via textContent).
   function el(tag, className, text) {
@@ -122,7 +147,7 @@
       pipeStep("02 · Echo", count("echo"), "2 families"),
       pipeStep("03 · Converging", converging, fresh ? "3+ families · new arrival" : "3+ families", converging ? "hot" : ""),
       pipeStep("04 · Question drafted", state.signals.filter((s) => s.draft).length, "AI drafts an item"),
-      pipeStep("05 · Ready for survey", 0, "you approve → registry", "dashed"),
+      pipeStep("05 · Ready for survey", state.signals.filter(isReady).length, "you approve → registry", state.signals.some(isReady) ? "" : "dashed"),
     );
     sec.append(list);
     return sec;
@@ -265,17 +290,12 @@
     return wrap;
   }
 
-  // Builds the draft-questionnaire box (or a quiet explanation when nothing is drafted), with the add button when a draft exists.
+  // Builds the draft-questionnaire box (or a quiet explanation when nothing is drafted); marked "Ready for survey" once approved.
   function renderDraft(sig) {
     const box = el("div", "res-draft");
     if (sig.draft) {
+      if (isReady(sig)) box.append(el("span", "res-chip res-chip--ready res-mono", "Ready for survey"));
       box.append(el("div", "res-draft-item", `“${sig.draft.item}”`), el("div", "res-note", sig.draft.question));
-      const row = el("div", "res-draft-row");
-      const btn = el("button", "res-gold", "Add to next questionnaire");
-      btn.type = "button";
-      btn.addEventListener("click", () => window.SignalSense.toast("QUESTIONNAIRE REGISTRY — COMING SOON"));
-      row.append(btn);
-      box.append(row);
     } else {
       box.append(el("div", "res-note", sig.watched ? "No research question yet — one appears once 2+ independent families report this theme." : "No research question — this theme isn't on the watch list."));
     }
@@ -314,6 +334,70 @@
       el("div", "res-note", `Different words, same area: ${sig.area}`),
     );
     return box;
+  }
+
+  // Builds the five-dot progress indicator: Observed → Converging → Question drafted → Community validation → Formal study.
+  function renderProgress(sig) {
+    const drafted = Boolean(sig.draft), approved = isReady(sig);
+    const reached = [true, sig.familyCount >= 2, drafted, approved, false];
+    const current = reached.lastIndexOf(true);
+    const families = plural(sig.familyCount, "family", "families");
+    const labels = [["Observed", families], ["Converging", reached[1] ? families : ""], ["Question drafted", ""], ["Community validation", approved ? "Ready for survey" : ""], ["Formal study", ""]];
+    const list = el("ol", "res-progress");
+    labels.forEach(([name, sub], i) => {
+      const li = el("li", "res-pg" + (reached[i] ? (i === current ? " is-current" : " is-done") : ""));
+      const dot = el("span", "res-pg-dot", reached[i] && i !== current ? "✓" : "");
+      li.append(dot, el("span", "res-pg-name", name), el("span", "res-pg-sub res-mono", sub));
+      list.append(li);
+    });
+    return list;
+  }
+
+  // Builds the compact Next steps panel for the selected signal, with the button that advances it to Community Validation.
+  function renderNextSteps(sig) {
+    const drafted = Boolean(sig.draft), approved = isReady(sig);
+    const currentStep = approved ? 3 : drafted ? 2 : 1;
+    const steps = [
+      ["Review", "Review the independent observations."],
+      ["Ask", "Refine the AI-drafted question and add it to the community questionnaire."],
+      ["Measure", "Collect structured responses across the community."],
+      ["Study", "If the pattern persists, move it into a registry or natural-history study."],
+    ];
+    const card = el("section", "card res-next");
+    card.setAttribute("aria-label", "Next steps");
+    card.append(mono("Next steps"), el("div", "res-note", "Turn this signal into action, step by step."));
+    const list = el("ol", "res-nsteps");
+    steps.forEach(([name, text], i) => {
+      const n = i + 1;
+      const li = el("li", "res-nstep" + (n < currentStep ? " is-done" : n === currentStep ? " is-current" : ""));
+      const body = el("div");
+      body.append(el("div", "res-nstep-name res-mono", name), el("div", "res-note", text));
+      li.append(el("span", "res-nstep-n", n < currentStep ? "✓" : String(n)), body);
+      list.append(li);
+    });
+    card.append(list);
+
+    if (approved) {
+      const done = el("div", "res-approved");
+      const undo = el("button", "res-undo res-mono", "Undo");
+      undo.type = "button";
+      undo.addEventListener("click", () => { ready.delete(sig.category); saveReady(); render(); });
+      done.append(el("span", "res-approved-text", "✓ Added to next questionnaire"), undo);
+      card.append(done, el("div", "res-note", "Moved to community validation."));
+    } else {
+      const btn = el("button", "res-gold res-gold--wide", "Add to next questionnaire  →");
+      btn.type = "button";
+      btn.disabled = !drafted;
+      btn.addEventListener("click", () => {
+        ready.add(sig.category);
+        saveReady();
+        window.SignalSense.toast("ADDED TO NEXT QUESTIONNAIRE");
+        render();
+      });
+      card.append(btn, el("div", "res-note", drafted ? "This will move the signal to the community validation stage." : sig.watched ? "A question is drafted once 2+ independent families report this theme." : "This theme isn't on the watch list, so no question is drafted."));
+    }
+    card.append(mono("Current status", "res-status-title"), renderProgress(sig));
+    return card;
   }
 
   // Builds the selected-signal detail panel: prominent hypothesis stamp, progression rail, then the three numbered steps.
@@ -420,7 +504,9 @@
     }
     const sel = selectedSignal();
     const split = el("div", "res-split");
-    split.append(renderGraphCard(), renderDetail(sel));
+    const leftCol = el("div", "res-left");
+    leftCol.append(renderGraphCard(), renderNextSteps(sel));
+    split.append(leftCol, renderDetail(sel));
     pane.append(renderStats(), renderPipeline(), split);
     const others = renderOthers(sel);
     if (others) pane.append(others);
@@ -460,6 +546,7 @@
     pane.append(mono("Draft questions", "res-accent"), el("h1", "res-h1 res-h1--sm", drafted.length ? "Awaiting your review." : "No questions drafted yet."));
     for (const s of drafted) {
       const card = el("div", "card res-row res-draft-card");
+      if (isReady(s)) card.append(el("span", "res-chip res-chip--ready res-mono", "Ready for survey"));
       card.append(mono(s.label), el("div", "res-draft-item", `“${s.draft.item}”`), el("div", "res-note", s.draft.question), el("span", "res-stamp res-mono", "Hypothesis, not finding · AI knowledge"));
       pane.append(card);
     }
