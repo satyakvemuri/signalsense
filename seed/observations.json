@@ -1,0 +1,62 @@
+[
+  {
+    "id": "obs_1",
+    "familyId": "fam_b",
+    "text": "Up three times last night, wide awake by 4am and wouldn't settle again.",
+    "createdAt": "2026-08-04T07:42:00Z"
+  },
+  {
+    "id": "obs_2",
+    "familyId": "fam_a",
+    "text": "buttons are getting harder for her lately",
+    "createdAt": "2026-08-11T19:15:00Z"
+  },
+  {
+    "id": "obs_3",
+    "familyId": "fam_c",
+    "text": "Barely touched dinner again. Says nothing tastes right, even the foods he used to love.",
+    "createdAt": "2026-08-17T20:05:00Z"
+  },
+  {
+    "id": "obs_4",
+    "familyId": "fam_a",
+    "text": "Weepy and irritable after school most days this week, snapped at her brother over nothing.",
+    "createdAt": "2026-08-24T16:30:00Z"
+  },
+  {
+    "id": "obs_5",
+    "familyId": "fam_b",
+    "text": "she stopped doing her embroidery",
+    "createdAt": "2026-08-29T10:20:00Z"
+  },
+  {
+    "id": "obs_6",
+    "familyId": "fam_c",
+    "text": "His words come out slurred when he's tired, and he loses his place mid-sentence.",
+    "createdAt": "2026-09-05T18:48:00Z"
+  },
+  {
+    "id": "obs_7",
+    "familyId": "fam_a",
+    "text": "Falling asleep at the dinner table but then lying awake till midnight. Her sleep schedule is all over the place.",
+    "createdAt": "2026-09-10T21:12:00Z"
+  },
+  {
+    "id": "obs_8",
+    "familyId": "fam_c",
+    "text": "can't open the juice cap anymore",
+    "createdAt": "2026-09-18T08:55:00Z"
+  },
+  {
+    "id": "obs_9",
+    "familyId": "fam_b",
+    "text": "Appetite has been up and down. Ate two helpings Sunday, then just toast and tea Monday.",
+    "createdAt": "2026-09-24T12:40:00Z"
+  },
+  {
+    "id": "obs_10",
+    "familyId": "fam_b",
+    "text": "Seemed low and withdrawn this week, didn't want to talk to anyone on the phone.",
+    "createdAt": "2026-09-30T17:25:00Z"
+  }
+]
