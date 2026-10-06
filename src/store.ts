@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -7,7 +8,6 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const SEED_PATH = path.resolve(here, "../seed/observations.json");
 
 const observations: Observation[] = [];
-let nextId = 1;
 
 // Checks that an unknown parsed JSON value has string id/familyId/text/createdAt.
 function isObservation(value: unknown): value is Observation {
@@ -38,14 +38,6 @@ export function loadSeeds(): number {
   observations.length = 0;
   observations.push(...(parsed as Observation[]));
 
-  // Continue numbering after the highest obs_<n> seed id (or the seed count, whichever is larger).
-  let maxN = observations.length;
-  for (const o of observations) {
-    const m = /^obs_(\d+)$/.exec(o.id);
-    if (m) maxN = Math.max(maxN, Number(m[1]));
-  }
-  nextId = maxN + 1;
-
   return observations.length;
 }
 
@@ -57,11 +49,21 @@ export function listObservations(): Observation[] {
 // Creates a new observation with a fresh id and timestamp, stores it, and returns it.
 export function addObservation(input: NewObservation): Observation {
   const observation: Observation = {
-    id: `obs_${nextId++}`,
+    id: `obs_${randomUUID().slice(0, 8)}`, // unique across restarts: Mem0 outlives this in-memory store
     familyId: input.familyId,
     text: input.text,
     createdAt: new Date().toISOString(),
   };
   observations.push(observation);
   return observation;
+}
+
+// Looks up one observation by its id, or undefined if it is not in the store.
+export function getObservation(id: string): Observation | undefined {
+  return observations.find((o) => o.id === id);
+}
+
+// Returns the distinct family IDs currently present in the store.
+export function listFamilyIds(): string[] {
+  return [...new Set(observations.map((o) => o.familyId))];
 }

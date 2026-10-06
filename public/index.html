@@ -23,6 +23,11 @@
     ul { list-style:none; margin:0; padding:0; display:grid; gap:10px; }
     .meta { display:flex; gap:10px; font-size:.82rem; color:var(--muted); margin-bottom:4px; }
     .fam { font-weight:600; color:var(--accent); }
+    .note { background:var(--card); border:1px solid var(--accent); border-radius:10px; padding:12px 16px; margin:0 0 20px; }
+    .note:empty { display:none; }
+    .note h2 { margin:0 0 6px; font-size:1rem; }
+    .note blockquote { margin:6px 0; padding-left:10px; border-left:3px solid var(--line); }
+    .note .q { color:var(--muted); font-style:italic; margin:8px 0 0; }
     .err { color:#b3261e; min-height:1.2em; margin:0; font-size:.9rem; }
   </style>
 </head>
@@ -39,6 +44,9 @@
       <p class="err" id="err" role="alert"></p>
       <button type="submit">Add observation</button>
     </form>
+
+    <section id="convergence" class="note" aria-live="polite"></section>
+    <section id="clusters"></section>
 
     <div class="bar">
       <strong id="count"></strong>
@@ -86,7 +94,52 @@
       $("list").replaceChildren(...items.map(renderItem));
     }
 
-    // Post a new observation, then clear the box and refresh the list.
+    // Draw a titled box of verbatim quotes (one per family) into the given container.
+    function renderQuotes(container, title, quotes, footer) {
+      const h = document.createElement("h2");
+      h.textContent = title;
+      container.append(h);
+      for (const m of quotes) {
+        const q = document.createElement("blockquote");
+        q.textContent = `“${m.text}” — ${m.familyId}`;
+        container.append(q);
+      }
+      if (footer) {
+        const f = document.createElement("p");
+        f.className = "q";
+        f.textContent = footer;
+        container.append(f);
+      }
+    }
+
+    // Show who else described something similar to what was just posted.
+    function renderConvergence(c) {
+      const box = $("convergence");
+      box.replaceChildren();
+      if (!c.available) {
+        box.textContent = "Saved. Similarity lookup is not available right now.";
+      } else if (c.count === 0) {
+        box.textContent = "Saved. No other family has described anything similar yet.";
+      } else {
+        renderQuotes(box, `${c.count} other famil${c.count === 1 ? "y" : "ies"} described something similar`, c.matches);
+      }
+    }
+
+    // Load themes reported by 2+ families and draw each with its quotes and drafted question.
+    async function refreshClusters() {
+      const box = $("clusters");
+      const res = await fetch("/api/clusters");
+      if (!res.ok) { box.replaceChildren(); return; }
+      const { clusters } = await res.json();
+      box.replaceChildren(...clusters.map((c) => {
+        const el = document.createElement("div");
+        el.className = "note";
+        renderQuotes(el, `Emerging pattern: ${c.theme}`, c.quotes, c.question);
+        return el;
+      }));
+    }
+
+    // Post a new observation, show any cross-family similarity, then refresh the list and patterns.
     async function submitObservation(e) {
       e.preventDefault();
       $("err").textContent = "";
@@ -99,13 +152,17 @@
         $("err").textContent = (await res.json()).error ?? "Could not save.";
         return;
       }
+      const { convergence } = await res.json();
       $("text").value = "";
+      renderConvergence(convergence);
       await refresh();
+      await refreshClusters();
     }
 
     $("add").addEventListener("submit", submitObservation);
     $("filter").addEventListener("change", refresh);
     refresh().catch((err) => { $("err").textContent = err.message; });
+    refreshClusters().catch(() => {});
   </script>
 </body>
 </html>
